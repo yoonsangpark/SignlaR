@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SignalR 채팅 샘플</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/7.0.0/signalr.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .header h1 {
+            margin-bottom: 10px;
+        }
+
+        .status {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+
+        .status.connected {
+            background: #4caf50;
+        }
+
+        .status.disconnected {
+            background: #f44336;
+        }
+
+        .content {
+            display: grid;
+            grid-template-columns: 1fr 300px;
+            gap: 20px;
+            padding: 20px;
+        }
+
+        .main-panel {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .user-setup {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        .user-setup input {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            margin-right: 10px;
+            width: 200px;
+        }
+
+        .user-setup button {
+            padding: 10px 20px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .user-setup button:hover {
+            background: #5568d3;
+        }
+
+        .messages {
+            flex: 1;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            padding: 15px;
+            overflow-y: auto;
+            max-height: 400px;
+            background: #fafafa;
+            margin-bottom: 20px;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            padding: 10px;
+            background: white;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+
+        .message-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+            font-size: 12px;
+            color: #666;
+        }
+
+        .message-user {
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .message-time {
+            color: #999;
+        }
+
+        .message-content {
+            color: #333;
+            word-wrap: break-word;
+        }
+
+        .message-input {
+            display: flex;
+            gap: 10px;
+        }
+
+        .message-input input {
+            flex: 1;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+
+        .message-input button {
+            padding: 12px 25px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .message-input button:hover {
+            background: #5568d3;
+        }
+
+        .message-input button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .users-panel {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        .users-panel h3 {
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        .user-list {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .user-item {
+            padding: 8px;
+            background: white;
+            margin-bottom: 5px;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+
+        .info-panel {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 10px;
+        }
+
+        .info-panel h3 {
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        .info-item {
+            margin-bottom: 8px;
+            font-size: 14px;
+            color: #666;
+        }
+
+        .info-item strong {
+            color: #333;
+        }
+
+        @media (max-width: 768px) {
+            .content {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>SignalR 실시간 채팅 샘플</h1>
+            <div id="connectionStatus" class="status disconnected">연결 끊김</div>
+        </div>
+
+        <div class="content">
+            <div class="main-panel">
+                <div class="user-setup">
+                    <input type="text" id="usernameInput" placeholder="사용자 이름을 입력하세요" maxlength="20">
+                    <button onclick="setUsername()">이름 설정</button>
+                    <span id="currentUser" style="margin-left: 15px; font-weight: bold; color: #667eea;"></span>
+                </div>
+
+                <div class="messages" id="messages"></div>
+
+                <div class="message-input">
+                    <input type="text" id="messageInput" placeholder="메시지를 입력하세요..." onkeypress="handleKeyPress(event)">
+                    <button id="sendButton" onclick="sendMessage()" disabled>전송</button>
+                </div>
+            </div>
+
+            <div class="sidebar">
+                <div class="users-panel">
+                    <h3>연결된 사용자</h3>
+                    <div class="user-list" id="userList">
+                        <div class="user-item">로딩 중...</div>
+                    </div>
+                </div>
+
+                <div class="info-panel">
+                    <h3>연결 정보</h3>
+                    <div class="info-item">
+                        <strong>Connection ID:</strong><br>
+                        <span id="connectionId">-</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let connection = null;
+        let currentUsername = '';
+
+        // SignalR 연결 초기화
+        function initConnection() {
+            connection = new signalR.HubConnectionBuilder()
+                .withUrl("/chathub")
+                .build();
+
+            // 연결 시작
+            connection.start()
+                .then(() => {
+                    updateConnectionStatus(true);
+                    document.getElementById('connectionId').textContent = connection.connectionId;
+                    connection.invoke("GetConnectedUsers");
+                })
+                .catch(err => {
+                    console.error("연결 오류:", err);
+                    updateConnectionStatus(false);
+                });
+
+            // 연결 상태 변경 이벤트
+            connection.onclose(() => {
+                updateConnectionStatus(false);
+            });
+
+            connection.onreconnecting(() => {
+                updateConnectionStatus(false);
+            });
+
+            connection.onreconnected(() => {
+                updateConnectionStatus(true);
+            });
+
+            // 메시지 수신
+            connection.on("ReceiveMessage", (user, message, time) => {
+                addMessage(user, message, time);
+            });
+
+            // 사용자 연결
+            connection.on("UserConnected", (connectionId) => {
+                console.log("사용자 연결:", connectionId);
+                connection.invoke("GetConnectedUsers");
+            });
+
+            // 사용자 연결 해제
+            connection.on("UserDisconnected", (username, connectionId) => {
+                console.log("사용자 연결 해제:", username, connectionId);
+                addSystemMessage(`${username}님이 나갔습니다.`);
+                connection.invoke("GetConnectedUsers");
+            });
+
+            // 사용자 참가
+            connection.on("UserJoined", (username, connectionId) => {
+                if (connectionId !== connection.connectionId) {
+                    addSystemMessage(`${username}님이 참가했습니다.`);
+                }
+                connection.invoke("GetConnectedUsers");
+            });
+
+            // 연결된 사용자 목록
+            connection.on("ConnectedUsers", (users) => {
+                updateUserList(users);
+            });
+        }
+
+        // 연결 상태 업데이트
+        function updateConnectionStatus(connected) {
+            const statusEl = document.getElementById('connectionStatus');
+            if (connected) {
+                statusEl.textContent = '연결됨';
+                statusEl.className = 'status connected';
+                document.getElementById('sendButton').disabled = !currentUsername;
+            } else {
+                statusEl.textContent = '연결 끊김';
+                statusEl.className = 'status disconnected';
+                document.getElementById('sendButton').disabled = true;
+            }
+        }
+
+        // 사용자 이름 설정
+        function setUsername() {
+            const username = document.getElementById('usernameInput').value.trim();
+            if (!username) {
+                alert('사용자 이름을 입력하세요.');
+                return;
+            }
+
+            if (connection && connection.state === signalR.HubConnectionState.Connected) {
+                connection.invoke("SetUsername", username)
+                    .then(() => {
+                        currentUsername = username;
+                        document.getElementById('currentUser').textContent = `현재 사용자: ${username}`;
+                        document.getElementById('usernameInput').disabled = true;
+                        document.getElementById('sendButton').disabled = false;
+                    })
+                    .catch(err => {
+                        console.error("이름 설정 오류:", err);
+                        alert('이름 설정에 실패했습니다.');
+                    });
+            } else {
+                alert('서버에 연결되지 않았습니다.');
+            }
+        }
+
+        // 메시지 전송
+        function sendMessage() {
+            const messageInput = document.getElementById('messageInput');
+            const message = messageInput.value.trim();
+
+            if (!message) return;
+            if (!currentUsername) {
+                alert('먼저 사용자 이름을 설정하세요.');
+                return;
+            }
+
+            connection.invoke("SendMessage", currentUsername, message)
+                .catch(err => {
+                    console.error("메시지 전송 오류:", err);
+                });
+
+            messageInput.value = '';
+        }
+
+        // 메시지 추가
+        function addMessage(user, message, time) {
+            const messagesDiv = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message';
+            messageDiv.innerHTML = `
+                <div class="message-header">
+                    <span class="message-user">${escapeHtml(user)}</span>
+                    <span class="message-time">${time}</span>
+                </div>
+                <div class="message-content">${escapeHtml(message)}</div>
+            `;
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        // 시스템 메시지 추가
+        function addSystemMessage(message) {
+            const messagesDiv = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.style.cssText = 'text-align: center; color: #666; font-style: italic; margin: 10px 0;';
+            messageDiv.textContent = message;
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        // 사용자 목록 업데이트
+        function updateUserList(users) {
+            const userListDiv = document.getElementById('userList');
+            if (users.length === 0) {
+                userListDiv.innerHTML = '<div class="user-item">연결된 사용자가 없습니다.</div>';
+                return;
+            }
+
+            userListDiv.innerHTML = users.map(user => 
+                `<div class="user-item">${escapeHtml(user)}</div>`
+            ).join('');
+        }
+
+        // HTML 이스케이프
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Enter 키 처리
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+
+        // 페이지 로드 시 연결 초기화
+        window.addEventListener('load', () => {
+            initConnection();
+        });
+    </script>
+</body>
+</html>
+
